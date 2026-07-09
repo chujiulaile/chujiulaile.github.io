@@ -1,0 +1,23 @@
+# === Node.js ===
+node_modules/
+
+# === Hexo ===
+public/
+db.json
+.deploy_git/
+
+# === System files ===
+.DS_Store
+Thumbs.db
+*.log
+
+# === IDE ===
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# === Environment ===
+.env
+.env.local
+.env.*.local
