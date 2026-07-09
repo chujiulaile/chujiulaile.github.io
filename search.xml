@@ -1,0 +1,563 @@
+<?xml version="1.0" encoding="utf-8"?>
+<search>
+  <entry>
+    <title>博客开张啦</title>
+    <url>/2026/07/09/%E4%B8%AA%E4%BA%BA%E7%94%9F%E6%B4%BB-%E7%AC%AC%E4%B8%80%E7%AF%87/</url>
+    <content><![CDATA[<h2 id="为什么创建这个博客"><a href="#为什么创建这个博客" class="headerlink" title="为什么创建这个博客"></a>为什么创建这个博客</h2><p>一直想有一个属于自己的小天地，用来记录技术成长、生活感悟和面试经验。经过几天的折腾，终于把这个博客搭建起来了！</p>
+<h2 id="技术栈"><a href="#技术栈" class="headerlink" title="技术栈"></a>技术栈</h2><ul>
+<li><strong>框架</strong>: Hexo 7.x</li>
+<li><strong>主题</strong>: Butterfly 5.5.5</li>
+<li><strong>部署</strong>: GitHub Pages</li>
+<li><strong>域名</strong>: chujiulaile.github.io</li>
+</ul>
+<h2 id="初心"><a href="#初心" class="headerlink" title="初心"></a>初心</h2><blockquote>
+<p>余生很贵，努力活成自己想要的样子，熬过艰难日子，就会迎来阳光明媚的未来。</p>
+</blockquote>
+<p>这句话一直激励着我。希望在这个博客里，能够：</p>
+<ol>
+<li>记录每一次技术突破</li>
+<li>分享面试中的经验和教训</li>
+<li>偶尔写写生活中的小确幸</li>
+</ol>
+<h2 id="关于未来"><a href="#关于未来" class="headerlink" title="关于未来"></a>关于未来</h2><p>后续会陆续更新以下内容：</p>
+<ul>
+<li>📖 <strong>面试指南</strong> —— 系统化整理面试知识点</li>
+<li>💻 <strong>技术分享</strong> —— 工作中遇到的分布式事务、高并发等实战经验</li>
+<li>🌸 <strong>日常生活</strong> —— 旅行、读书、摄影</li>
+<li>📄 <strong>个人简历</strong> —— 项目经历和工作履历</li>
+</ul>
+<p>欢迎常来看看！</p>
+]]></content>
+      <categories>
+        <category>个人生活</category>
+      </categories>
+      <tags>
+        <tag>生活</tag>
+        <tag>随笔</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>分布式事务解决思路</title>
+    <url>/2023/07/29/%E5%88%86%E5%B8%83%E5%BC%8F%E4%BA%8B%E5%8A%A1/</url>
+    <content><![CDATA[<h2 id="数据不一致解决思路"><a href="#数据不一致解决思路" class="headerlink" title="数据不一致解决思路"></a>数据不一致解决思路</h2><p>数据不一致的根因有两种</p>
+<p>1.下游业务超时，导致业务状态不稳定，此时上游业务回滚&#x2F;异常，但下游业务实际成功。 </p>
+<p>2.同一业务流程中有多个下游服务的RPC调用，前序业务执行成功，后续业务调用失败，前序业务未回滚。 </p>
+<p>针对以上两种情况，业内有比较通用的解决方案，具体如下： </p>
+<p>1.对于接口超时导致的未知错误，需要通过重试来明确执行结果，因此对下游服务均保证接口幂等（技术上所有业务接口都可以通过幂等表&#x2F;幂等键来保证接口幂等）。 </p>
+<p>2.通过补偿型事务进行向前重试或者向后回滚，以达到数据的最终一致性。业务常用方案如TCC、Saga等。 </p>
+<h2 id="补偿型事务选型"><a href="#补偿型事务选型" class="headerlink" title="补偿型事务选型"></a>补偿型事务选型</h2><table>
+<thead>
+<tr>
+<th></th>
+<th><strong>方案名称</strong></th>
+<th><strong>描述</strong></th>
+<th><strong>适合的场景</strong></th>
+<th><strong>优点</strong></th>
+<th><strong>缺点</strong></th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>最大努力通知</td>
+<td>顾名思义，即本地事务成功后不断地对下游业务进行同步&#x2F;异步的正向重试补偿，以此达到数据最终一致。</td>
+<td>+ 下游业务场景通过重试一定会成功<br/>+ 可靠性要求不高的非核心链路，如数据异步更新、消息通知等。因为极端情况下可能会丢失事务信息。</td>
+<td>+ 实现简单，对业务侵入性小</td>
+<td>+ 事务上下文信息坑会丢失；丢失后业务手动补偿难度较打；<br/>+ 只支持正向重试补偿</td>
+</tr>
+<tr>
+<td>2</td>
+<td>可靠消息型事务</td>
+<td>使用消息事件表存储需要补偿的业务信息，通过本地事务保证业务和消息事件一起成功失败。本地事务成功后通过RPC或者MQ的方式调用下游服务，若调用成功删除本地事件；若调用失败通过定时任务扫描事件表，查询出未执行成功事件，对下游业务进行重试。</td>
+<td>+ 下游业务场景通过重试一定会成功<br/>+ 对可靠性要求较高的场景。</td>
+<td>+ 通过本地事务保证了强一致性；<br/>+ 通过记录的事件信息可以方便的进行事务恢复和补偿。</td>
+<td>+ 对业务有侵入，需要在DB更新写入事件信息。<br/>+ 只支持正向重试补偿。</td>
+</tr>
+<tr>
+<td>3</td>
+<td>TCC</td>
+<td>TCC(Try-Confirm-Cancel)实际上是服务化的两阶段提交协议，业务开发者需要实现者三个服务接口，第一阶段服务由业务代码编排来调用Try接口进行资源预留，所有参与者的Try接口都成功了，事务管理器会提交事务，并调用每个参与者的Confirm接口真正提交业务操作，否则调用每个参与者的Cancel接口回滚事务。</td>
+<td>+ 对事务隔离性要求高的服务，Try阶段的存在可以很好地保证TCC事务直接彼此的隔离性<br/>+ 业务可以方便地抽象出TCC的三个阶段。尤其适合新服务，没有老逻辑的包袱。</td>
+<td>+ 一致性、隔离性好</td>
+<td>+ 对业务而言需要抽象出2个阶段，有一个业务改造成本</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Saga</td>
+<td>业务处理由一系列sub-transation Ti（字事务，也叫分支事务）组成，每个TI都有对应的补偿动作Ci，补偿动作用于撤销Ti造成的结果。某一步进行失败后，可以又失败情况决定向前重试还是向后回滚。向后回滚为撤销掉之前所有成功的sub-transation，使得整个执行结果撤销；向前重试为不断地正向重试。</td>
+<td>+ 当执行失败的参与者资源状态会对其他服务或者其他参与者产生副作用，就可以考虑向后回滚的方式。<br/>+ 没有预留动作，易于改造兼容老的业务逻辑。<br/>+ 补偿服务即正向服务的“反向”，易于理解，易于实现。</td>
+<td>+ 易用改造实现，业务上理解成本较低</td>
+<td>+ 不保证隔离性，如果出现了并发请求的情况，可能会导致无法回滚，脏读等情况。</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p>对于以上4中方案实现，都需要下游支持接口的幂等</p>
+<p>最大努力通知和可靠消息事务必须保证正向重试一定能够成功</p>
+<p>TCC和Saga必须保证逆向回滚一定能够成功。</p>
+</blockquote>
+<h2 id="资源的定义"><a href="#资源的定义" class="headerlink" title="资源的定义"></a>资源的定义</h2><blockquote>
+<p>资源的定义：会引起数据变更的操作，就认为是当前服务要操作的资源，主要包括：</p>
+<ul>
+<li>下游业务的所有写接口</li>
+<li>DB、ES等存储类系统的所有写操作</li>
+</ul>
+</blockquote>
+<blockquote>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>资源特征</th>
+<th>名词解释说明</th>
+<th>对应的供应链资源</th>
+<th>分析</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>资源约束型</td>
+<td>在执行业务时，资源方会校验资源是否充足。 资源充足即成功，不够即失败。</td>
+<td>库存锁库、出库； 账户余额的冻结、扣款； 促销资源预占；</td>
+<td>需要考虑事务隔离。若事务不隔离会存在脏读&#x2F;回滚失败问题。 ·例1：正向是加资源的流程，回滚逆向会扣减资源，会存在并发情况导 致资源已被其他事务扣减，就会存在资源不足导致回滚失败的情况。 •失败后无法重入，需要考虑链路上资源的回滚。</td>
+</tr>
+<tr>
+<td>2</td>
+<td>业务校验型</td>
+<td>在执行业务时，会进行业务校验。如单据状态、会计期、物 品启停用、APM校验、DB乐观锁校验等等。 业务校验通过后业务一定成功。 备注：供应链现状正常的校验都会由上游业务前置进行，所 以除开BUG因素理论上业务上无校验型资源。</td>
+<td>-</td>
+<td>• 若存在此类场景，业务校验失败后无法重入，需要考虑链路上资源的回 滚。 ·业务校验型无需关注事物隔离，后续与资源约束型一同讨论。</td>
+</tr>
+<tr>
+<td>3</td>
+<td>DB资源</td>
+<td>业务提交本地事务更新DB数据，也是当前业务的资源之 一。 备注：特指有乐观锁校验的DB资源，单DB创建&#x2F;查询属于不 限制型。</td>
+<td>-</td>
+<td>•业务中存在的乐观锁在业务并发执行时可能会导致DB更新失败。失败后， 需要考虑链路上资源的回滚。 •非二阶段业务，DB资源提交后，回滚难度较大。</td>
+</tr>
+<tr>
+<td>4</td>
+<td>不限制型</td>
+<td>下游业务最终一定会成功。 注意状态是最终一定成功，可能会出现业务阻塞导致的中间 失败，但最终可以成功也认为是不限制型资源。 如虚拟出入库，可能受成本重算影响失败，但是成本重算结 束后再次重试就会成功。</td>
+<td>ES资源； 虚拟出入库； 库存释放预占、入库、反 审核； 账户余额的解冻、退款； 下游资源的创建</td>
+<td>• 适用正向补偿，最终一定会成功。</td>
+</tr>
+<tr>
+<td>5</td>
+<td>总结：<br/>1. 不限制型资源可以正向补偿，4种补偿事务实现都能支持<br/>2. 资源约束型、业务校验型和DB资源都需要考虑链路上的资源回滚，只能考虑TCC和Saga<br/>3. 资源约束型需要考虑事务隔离，最佳选择为TCC、Saga型事务在该场景下需要业务支持。</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody></table>
+<h2 id="业务分析-归类"><a href="#业务分析-归类" class="headerlink" title="业务分析&amp;归类"></a>业务分析&amp;归类</h2><p>对供应链现有的业务依赖场景进行梳理汇总，如下图所示：</p>
+<img src="https://cdn.nlark.com/yuque/0/2026/png/33698177/1780641483287-4daebc74-5220-4df5-9171-dfa2b0a6e998.png" width="748" title="" crop="0,0,1,1" id="uf084e31c" class="ne-image">
+
+
+
+<p>整体看，供应链业务资源主要分为了2大类，分别为不限制类资源和全局限定类资源。</p>
+<p>1.不限制类资源，主要涉及单据的创建、更新和消息推送等操作。不限制类资源的特点是业务上操作均会成功。</p>
+<p>2.全局限定类资源，主要涉及促销、账户和库存，全局限定类资源的特点是会被上游多入业务方操作；有资源限定、超出限定业务失败。详细资源操作如下：</p>
+<ul>
+<li>促销：主要涉及促销资源的预占，若促销资源不够则预占失败。</li>
+<li>账户：主要涉及账户的冻结、解冻、扣款和退款。对于冻结、扣款这类资源减少操作，金额不够业务失败。对于解冻、退款等资源增加操作，业务上一定成功。</li>
+<li>库存：主要涉及库存的预占、锁库和出入库。对于锁库、出库等资源减少操作，库存不足业务失败；对于入库等库存增加操作，可能因为成本重算等业务校验不过导致失败，但最终业务上一定会成功。</li>
+</ul>
+<blockquote>
+<p>1.限定资源仅包括对促销、账户和库存本身的余额&#x2F;结存数据。资源操作也是对以上数据的操作。</p>
+<p>2.每个业务会进行的非资源校验如物品启停用、仓库是否可用、管辖权限&#x2F;范围、会计期、盘点等统称为业务上下文。</p>
+<p>3.业务上下文同样会导致业务的失败，目前必须采用预校验方式，由上游业务提前进行预先校验，后续仅是对资源的操作。目前供应链都是使用了预校验方式，会在业务侧进行所有业务上下文的校验。</p>
+</blockquote>
+<p>综上梳理，供应链业务资源特征整体可分为以下三类：</p>
+<ul>
+<li>资源类型：定义资源是不限制类资源还是全局限定类资源。不限制资源业务上操作一定会成功；全局限定资源业务上操作可能会失败，并且全局资源是多个业务方共享的资源，因此对全局</li>
+</ul>
+<p> 限定类资源操作需要考虑资源隔离。</p>
+<ul>
+<li><p>资源操作是增加还是减少：站在资源方的视角，资源操作会增加资源还是减少资源。资源的减少需要考虑资源是否充足，会出现失败的情况，此时即使重入也会失败。资源的增加一般业务</p>
+<pre><code>上不会存在限制，最终一定成功。资源增加/减少只需要全局限定类资源关注，不限制资源无需张注。
+</code></pre>
+</li>
+<li><p>业务方是否关注资源操作结果：业务方包含了调用方和客户端，指业务上是否要使用资源操作的结果。最直接的表现是，客户端是否需要展示资源操作结果或者调用方是否需要操作结果继</p>
+<p>   续进行后续业务，如：订货单分单生成配送单场景，需要将生成的配送单展示给用户。对于全局限定资源减少操作，业务方一定需要及时感知结果；对于全局限定资源增加、不限制类资源</p>
+</li>
+</ul>
+<p>的操作，业务方可能不关注结果。</p>
+<p>按照上述三个维度对资源操作进行归类，总共有5种资源操作类型，详细如下表所示：</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>资源操作分类</th>
+<th>资源操作的业务特征</th>
+<th>分布式事务选型分析是否可重试？ [假定资源操作均保证幂 等 [不考虑业务上下文变化]</th>
+<th>是否可回滚？</th>
+<th>技术选型建议</th>
+<th>场景举例</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>全局限定资源减少</td>
+<td>资源类型：全局限定资源 资源操作是增加还是减少：减少 业务方关注资源操作结果：关注</td>
+<td>不可重试 重试失败因素： ·全局限定资源不足</td>
+<td>可回滚 回滚失败因素： ·无</td>
+<td>Saga TCC</td>
+<td>场景：配送单发货场景，生成配送出库单并更新结存信息 资源定义：从配送业务域视角来看，库存结存看作是一种资源，出库单本质上仍 然时操作的库存结存 资源类型：全局限定资源 业务方是否关注资源操作结果：关注 资源操作是增加还是减少：结存资源减少</td>
+</tr>
+<tr>
+<td>2</td>
+<td>业务方关注的全局 限定资源增加</td>
+<td>资源类型：全局限定资源 资源操作是增加还是减少：增加 业务方关注资源操作结果：关注</td>
+<td>可重试 重试失败因素： ·无</td>
+<td>可回滚，但可能回滚失败 回滚失败因素： ·全局限定资源不足</td>
+<td>重试 <br/>Saga TCC</td>
+<td>暂未发现此类场景</td>
+</tr>
+<tr>
+<td>3</td>
+<td>业务方不关注的全 局限定资源增加</td>
+<td>资源类型：全局限定资源 资源操作是增加还是减少：增加 业务方关注资源操作结果：不关 注</td>
+<td>可重试 重试失败因素： ·无</td>
+<td>可回滚，但可能回滚失败 回滚失败因素： ·全局限定资源不足</td>
+<td>重试</td>
+<td>场景：配送单撤销发货，会对出库单据进行撤销并更新结存信息 资源定义：库存的结存数量 资源类型：全局限定资源 业务方是否关注资源操作结果：不关注 资源操作是增加还是减少：增加，</td>
+</tr>
+<tr>
+<td>4</td>
+<td>业务方关注的不限 制资源</td>
+<td>资源类型：不限定资源 业务方关注资源操作结果：关注</td>
+<td>可重试 重试失败因素： ·无</td>
+<td>可回滚 回滚失败因素： ·无</td>
+<td>重试 Saga TCC</td>
+<td>场景：典型的单据下推场景，订货单分单场景，调用配送服务生成配送单 资源定义：从订货业务域视角看，配送单生成操作是一个资源 资源类型：不限定资源 客户端是否关注资源操作结果：关注，交互上需将生成的配送单展示给商家</td>
+</tr>
+<tr>
+<td>5</td>
+<td>业务方不关注的不 限制资源</td>
+<td>资源类型：不限定资源 业务方关注资源操作结果：不关 注</td>
+<td>可重试 重试失败因素： ·无</td>
+<td>可回滚 回滚失败因素： ·无</td>
+<td>重试</td>
+<td>场景：配送单更新本地物流信息后，远程调用外网（快递100）完成“物流信息 订阅” 资源定义：从配送业务域视角来看，物流信息订阅相关操作被看作是一种资源 资源类型：不限定资源</td>
+</tr>
+</tbody></table>
+<h3 id="5-3-典型场景推导"><a href="#5-3-典型场景推导" class="headerlink" title="5.3 典型场景推导"></a>5.3 典型场景推导</h3><p>结合单列出来的本地事务资源操作，总共有6类资源操作：<strong>【全局限定资源减少】</strong>、<strong>【业务方关注的全局限定资源增加】</strong>、<strong>【业务方不关注的全局限定资源增加】</strong>、<strong>【业务方关注的不限制资源】</strong>、<strong>【业务方不关注的不限制资源】</strong>、<strong>【本地事务操作】</strong>。</p>
+<p>以上6种资源操作分类在业务上进行排列组合，以供应链现有业务链路为基础，结合实际业务场景，最终沉淀出一些最标准的流程编排，如下表所示：</p>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>示例场景</th>
+<th>方案设计</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>场景一</strong>      1. <code>N</code> 【全局限定资源减少】 +    1 【本地事务操作】 +    0. <code>N</code> 【业务方不关注的不限制资源】</td>
+<td><strong>订货单保存并提交：</strong>      1. 资金账户冻结 【全局限定资源减少】   2. DB事务写入 【本地事务操作】   3. 库存预占 【全局限定资源减少】   4. 促销资源预占 【全局限定资源减少】   5. 创建审批流 【业务方不关注的不限制资源】</td>
+<td><strong>业务编排设计</strong>      - 【全局限定资源减少】失败后，再次重入也是失败，此时可能前序的【全局限定资源】已经提交成功，所以对于【全局限定资源减少】的操作必须支持回滚；同样又因为【本地事务】回滚难度较大，所以<strong>【全局限定资源减少】必须在【本地事务】之前提交</strong>。      - 不限制资源不一定能够成功，且业务方不关注结果，因此<strong>【业务方不关注的不限制资源】放在本地事务之后进行同步&#x2F;异步方式提交</strong>，提交超时可通过同步&#x2F;异步的方式进行重入。      综上，整体业务编排为 <strong>【全局限定资源减少】 -&gt; 【本地事务操作】 -&gt; 【业务方不关注的不限制资源】</strong>，图示如下：   <br/><img src="https://cdn.nlark.com/yuque/__mermaid_v3/25078cac281a8f1f1bf4056e00ffdc1e.svg">     <strong>事务方案设计</strong>      - 此类场景【全局限定资源减少】需要支持回滚，必须采用 TCC 型事务或 Saga 型事务。   - 此类场景对于【业务方不关注的不限制资源】采用最大努力通知和可靠消息型事务能满足诉求且成本最低。</td>
+</tr>
+<tr>
+<td><strong><font style="color:rgb(15, 17, 21);">场景景二</font></strong><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">1. </font><code>&lt;font style=&quot;color:rgb(15, 17, 21);background-color:rgb(235, 238, 242);&quot;&gt;N&lt;/font&gt;</code><font style="color:rgb(15, 17, 21);"> 【全局限定资源减少】 +   </font><font style="color:rgb(15, 17, 21);">1 【本地事务操作】 +   </font><font style="color:rgb(15, 17, 21);">1. </font><code>&lt;font style=&quot;color:rgb(15, 17, 21);background-color:rgb(235, 238, 242);&quot;&gt;N&lt;/font&gt;</code><font style="color:rgb(15, 17, 21);"> 【业务方关注的不限制资源】 +   </font><font style="color:rgb(15, 17, 21);">0. </font><code>&lt;font style=&quot;color:rgb(15, 17, 21);background-color:rgb(235, 238, 242);&quot;&gt;N&lt;/font&gt;</code><font style="color:rgb(15, 17, 21);"> 【业务方不关注的不限制资源】</font></td>
+<td><strong><font style="color:rgb(15, 17, 21);">配送发货-后定价：</font></strong><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">1. 库存出库 【全局限定资源减少】</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">2. 后定价重新修改出库单 【业务方关注的不限制资源】</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">3. DB-配送单&amp;收货单保存 【本地事务操作】</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">4. 资金账户扣减 【全局限定资源减少】</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">5. 自动收货MQ 【业务方不关注的不限制资源】</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">6. 状态变更消息 【业务方不关注的不限制资源】</font></td>
+<td><strong><font style="color:rgb(15, 17, 21);">业务编排设计</font></strong><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">- 【全局限定资源减少】和【业务方不关注的不限制资源】编排同场景一，不再赘述。   </font><font style="color:rgb(15, 17, 21);">- 【业务方关注的不限制资源】可能交替出现在【全局限定资源减少】中间，此时同样可能出现前序的不限制资源已经提交成功，后续操作失败后同样必须回滚不限制资源。所以此场景需要将</font><strong><font style="color:rgb(15, 17, 21);">【业务方关注的不限制资源】当成【全局限定资源减少】处理</font></strong><font style="color:rgb(15, 17, 21);">。      </font><font style="color:rgb(15, 17, 21);">综上，整体业务编排为 </font><strong><font style="color:rgb(15, 17, 21);">【全局限定资源减少】 -&gt; 【业务方关注的不限制资源】 -&gt; 【本地事务操作】 -&gt; 【业务方不关注的不限制资源】</font></strong><font style="color:rgb(15, 17, 21);">，图示如下：   </font><br/><img src="https://cdn.nlark.com/yuque/__mermaid_v3/7f0eb11527f33353e03c596eadb65ed1.svg">  <font style="color:rgb(15, 17, 21);">      </font><strong><font style="color:rgb(15, 17, 21);">事务方案设计</font></strong><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">- 此类场景【全局限定资源减少】、【业务方关注的不限制资源】需要支持回滚，必须采用 TCC 型事务或 Saga 型事务。      </font><font style="color:rgb(15, 17, 21);">- 此类场景对于【业务方不关注的不限制资源】采用最大努力通知和可靠消息型事务能满足诉求且成本最低。</font></td>
+</tr>
+<tr>
+<td><strong><font style="color:rgb(15, 17, 21);">场景三</font></strong><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">1.</font><font style="color:rgb(15, 17, 21);"> </font><code>&lt;font style=&quot;color:rgb(15, 17, 21);background-color:rgb(235, 238, 242);&quot;&gt;N&lt;/font&gt;</code><br/><font style="color:rgb(15, 17, 21);"> </font><font style="color:rgb(15, 17, 21);">【业务方不关注的全局限定资源增加】 +</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">1 【本地事务操作】 +</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">0.</font><font style="color:rgb(15, 17, 21);"> </font><code>&lt;font style=&quot;color:rgb(15, 17, 21);background-color:rgb(235, 238, 242);&quot;&gt;N&lt;/font&gt;</code><br/><font style="color:rgb(15, 17, 21);"> </font><font style="color:rgb(15, 17, 21);">【业务方不关注的不限制资源】</font></td>
+<td><strong><font style="color:rgb(15, 17, 21);">关闭配送单：</font></strong><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">1. 库存预占释放 【业务方不关注的全局限定资源增加】</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">2. DB保存(乐观锁) 【本地事务操作】</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">3. 资金账户释放预占 【业务方不关注的全局限定资源增加】</font></td>
+<td><strong><font style="color:rgb(15, 17, 21);">业务编排设计</font></strong><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">- 对于【业务方不关注的全局限定资源增加】而言，资源操作最终一定成功，且业务方不关注可进行异步调用。</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">- 【本地事务】可能因为乐观锁校验失败，因此按</font><strong><font style="color:rgb(15, 17, 21);">【业务方不关注的全局限定资源增加】 -&gt; 【本地事务】</font></strong><font style="color:rgb(15, 17, 21);">编排方式需要涉及到资源的回滚，所以此类场景更倾向于先提交【本地事务】。</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">综上，整体业务编排为</font><font style="color:rgb(15, 17, 21);"> </font><strong><font style="color:rgb(15, 17, 21);">【本地事务操作】 -&gt; 【业务方不关注的全局限定资源增加】 -&gt; 【业务方不关注的不限制资源】</font></strong><font style="color:rgb(15, 17, 21);">，图示如下：</font><font style="color:rgb(15, 17, 21);">      </font><br/><img src="https://cdn.nlark.com/yuque/__mermaid_v3/105c8ffa4686eb3e3c17be805d44ee4f.svg">  <font style="color:rgb(15, 17, 21);">      </font><strong><font style="color:rgb(15, 17, 21);">事务方案设计</font></strong><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">- 此类场景对于【业务方不关注的全局限定资源增加】和【业务方不关注的不限制资源】采用最大努力通知和可靠消息型事务能满足诉求且成本最低。</font></td>
+</tr>
+<tr>
+<td><strong><font style="color:rgb(15, 17, 21);">场景四</font></strong><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">1.</font><font style="color:rgb(15, 17, 21);"> </font><code>&lt;font style=&quot;color:rgb(15, 17, 21);background-color:rgb(235, 238, 242);&quot;&gt;N&lt;/font&gt;</code><font style="color:rgb(15, 17, 21);"> </font><font style="color:rgb(15, 17, 21);">【业务方关注的全局限定资源增加】 +</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">1 【本地事务操作】 +</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">1.</font><font style="color:rgb(15, 17, 21);"> </font><code>&lt;font style=&quot;color:rgb(15, 17, 21);background-color:rgb(235, 238, 242);&quot;&gt;N&lt;/font&gt;</code><font style="color:rgb(15, 17, 21);"> </font><font style="color:rgb(15, 17, 21);">【业务方关注的不限制资源】 +</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">0.</font><font style="color:rgb(15, 17, 21);"> </font><code>&lt;font style=&quot;color:rgb(15, 17, 21);background-color:rgb(235, 238, 242);&quot;&gt;N&lt;/font&gt;</code><font style="color:rgb(15, 17, 21);"> </font><font style="color:rgb(15, 17, 21);">【业务方不关注的不限制资源】</font></td>
+<td><strong><font style="color:rgb(15, 17, 21);">暂未发现此类场景</font></strong></td>
+<td><strong><font style="color:rgb(15, 17, 21);">业务编排设计</font></strong><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">- 由于【业务方关注的全局限定资源增加】和【业务方关注的不限制资源】最终一定会成功，可以优先考虑将以上两种资源转变为业务方不关注的资源，否则由于【本地事务操作】可能会失败，所以必须考虑资源的回滚。      </font><font style="color:rgb(15, 17, 21);">综上，对于能转变为业务方不关注资源的场景同场景三，不再赘述。      </font><font style="color:rgb(15, 17, 21);">不能转变的场景，此时需要区分是 </font><strong><font style="color:rgb(15, 17, 21);">前置关注结果</font></strong><font style="color:rgb(15, 17, 21);"> 还是 </font><strong><font style="color:rgb(15, 17, 21);">调用方关注结果</font></strong><font style="color:rgb(15, 17, 21);">。      </font><font style="color:rgb(15, 17, 21);">1. 对于前置关注结果的情况，由于DB可能失败，为了避免资源的回滚，同样也可以采用DB先提交的方案，但是后续业务资源提交必须</font><strong><font style="color:rgb(15, 17, 21);">同步重试</font></strong><font style="color:rgb(15, 17, 21);">，极端情况下一直重试失败时需要给用户特殊提醒并人工介入。      </font><font style="color:rgb(15, 17, 21);">2. 对于调用方关注结果的情况，可能需要拿到结果后更新DB，所以必须先进</font><strong><font style="color:rgb(15, 17, 21);">【业务方关注的不限制资源操作】</font></strong><font style="color:rgb(15, 17, 21);"> 再进行 </font><strong><font style="color:rgb(15, 17, 21);">【本地事务操作】</font></strong><font style="color:rgb(15, 17, 21);">，此时接口一旦超时或者DB更新失败，需要进行回滚，图示如下：   </font><br/><img src="https://cdn.nlark.com/yuque/__mermaid_v3/f891001989c04c80ed6ff8388c595e84.svg">  <font style="color:rgb(15, 17, 21);">   </font><em><font style="color:rgb(15, 17, 21);"></font></em><font style="color:rgb(15, 17, 21);">      </font><strong><font style="color:rgb(15, 17, 21);">事务方案设计</font></strong><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">- 方案1：</font><strong><font style="color:rgb(15, 17, 21);">业务重试</font></strong><font style="color:rgb(15, 17, 21);">，在DB提交后，对业务一直进行正向重试补偿，若重试一直失败的情况下需要有特殊交互和文案。   </font><font style="color:rgb(15, 17, 21);">- 方案2：</font><strong><font style="color:rgb(15, 17, 21);">业务回滚(Saga)</font></strong><font style="color:rgb(15, 17, 21);">，在失败后进行资源回滚，但由于回滚操作是资源的扣减，所以需要业务保证“回滚时资源量充足”或者“回滚不校验资源量”。   </font><font style="color:rgb(15, 17, 21);">- 方案3：</font><strong><font style="color:rgb(15, 17, 21);">TCC</font></strong><font style="color:rgb(15, 17, 21);">，try阶段锁定资源，回滚一定能成功。</font></td>
+</tr>
+<tr>
+<td><strong><font style="color:rgb(15, 17, 21);">场景五</font></strong><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">1 【本地事务操作】 +</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">1.</font><font style="color:rgb(15, 17, 21);"> </font><code>&lt;font style=&quot;color:rgb(15, 17, 21);background-color:rgb(235, 238, 242);&quot;&gt;N&lt;/font&gt;</code><font style="color:rgb(15, 17, 21);"> </font><font style="color:rgb(15, 17, 21);">【业务方关注的不限制资源】 +</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">0.</font><font style="color:rgb(15, 17, 21);"> </font><code>&lt;font style=&quot;color:rgb(15, 17, 21);background-color:rgb(235, 238, 242);&quot;&gt;N&lt;/font&gt;</code><font style="color:rgb(15, 17, 21);"> </font><font style="color:rgb(15, 17, 21);">【业务方不关注的全局限定资源增加】 +</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">0.</font><font style="color:rgb(15, 17, 21);"> </font><code>&lt;font style=&quot;color:rgb(15, 17, 21);background-color:rgb(235, 238, 242);&quot;&gt;N&lt;/font&gt;</code><font style="color:rgb(15, 17, 21);"> </font><font style="color:rgb(15, 17, 21);">【业务方不关注的不限制资源】</font></td>
+<td><strong><font style="color:rgb(15, 17, 21);">订货单分单：</font></strong><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">1. 对分单完成的单据，释放库存 【业务方不关注的全局限定资源增加】</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">2. DB事务写入 【本地事务操作】</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">3. 推送下游单据 【业务方关注的不限制资源操作】</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">    a. DB 创建采购订单（统采统配、直采直配）</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">    b. DB 创建待提交的订货单（跨级配送）</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">    c. RPC 创建配送单（统采统配、统采直配、直采直配）</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">    d. RPC 创建配送收货单（直采直配）</font></td>
+<td><strong><font style="color:rgb(15, 17, 21);">同场景四。</font></strong></td>
+</tr>
+</tbody></table>
+<h2 id="极端场景的处理方案"><a href="#极端场景的处理方案" class="headerlink" title="极端场景的处理方案"></a><font style="color:rgb(15, 17, 21);">极端场景的处理方案</font></h2><h3 id="接口超时处理"><a href="#接口超时处理" class="headerlink" title="接口超时处理"></a><font style="color:rgb(15, 17, 21);">接口超时处理</font></h3><p><font style="color:rgb(15, 17, 21);">处理原则如下：</font></p>
+<ol>
+<li><font style="color:rgb(15, 17, 21);">选择正向重试补偿时，若资源方接口超时，直接进行重试补偿，如果重试多次均不成功，则人工介入处理。</font></li>
+<li><font style="color:rgb(15, 17, 21);">选择 TCC &#x2F; Saga 事务时，资源方接口超时，RPC 层面直接重试3次，如果成功则继续；如果重试失败，则进行回滚 当前资源 + 前序资源。</font></li>
+</ol>
+<h3 id="空回滚处理"><a href="#空回滚处理" class="headerlink" title="空回滚处理"></a><font style="color:rgb(15, 17, 21);">空回滚处理</font></h3><p><strong><font style="color:rgb(15, 17, 21);">空回滚的定义</font></strong><font style="color:rgb(15, 17, 21);">：事务没有经过正向阶段就执行了 cancel 方法。下游业务需要支持空回滚成功，且 cancel 后不允许进行正向提交。</font></p>
+<p><strong><font style="color:rgb(15, 17, 21);">空回滚出现的场景举例如下：</font></strong></p>
+<ol>
+<li><font style="color:rgb(15, 17, 21);">选择 TCC 事务，Try 阶段有资源锁定失败，需要对 Try 阶段资源进行回滚，可能存在资源方还未调用 try 方法，但是会调用回滚方法。</font></li>
+<li><font style="color:rgb(15, 17, 21);">选择 TCC &#x2F; Saga 事务，正向接口一直超时，资源方未完成处理；此时业务方发起回滚，可能存在回滚请求先于正向请求进行处理。</font></li>
+<li><font style="color:rgb(15, 17, 21);">选择正向重试补偿时，对下游业务进行异步补偿，可能出现异步补偿一直失败（如库存此时在进行成本重算），此时用户发起了单据的撤销“回滚”。</font></li>
+</ol>
+<p><strong><font style="color:rgb(15, 17, 21);">空回滚带来的副作用是事务悬挂问题，如下：</font></strong></p>
+<ol>
+<li><font style="color:rgb(15, 17, 21);">事务空回滚后，此时正向请求到达资源方，资源方进行了正向资源的扣减，但此时实际上事务已经进行回滚。</font></li>
+</ol>
+<p><strong><font style="color:rgb(15, 17, 21);">治理方案：</font></strong></p>
+<ol>
+<li><font style="color:rgb(15, 17, 21);">需要新增事务控制表，记录事务执行状态。</font></li>
+<li><font style="color:rgb(15, 17, 21);">正向流程到达时，若事务控制表记录为空，插入一条记录状态为初始化。后续回滚请求到达时发现事务控制表里有记录，状态为初始化，继续执行回滚。</font></li>
+<li><font style="color:rgb(15, 17, 21);">如果回滚请求到达时发现事务控制表里没有自身 XID 的记录，说明自己是一个空回滚，需要新增一条记录，用于防止后续的正向事务悬挂。</font></li>
+<li><font style="color:rgb(15, 17, 21);">如果正向流程到达，发现事务控制表记录不为空，意识到自己是一个悬挂的方法，因此忽略执行。</font></li>
+</ol>
+<h3 id="业务上下文变化处理"><a href="#业务上下文变化处理" class="headerlink" title="业务上下文变化处理"></a><font style="color:rgb(15, 17, 21);">业务上下文变化处理</font></h3><p><strong><font style="color:rgb(15, 17, 21);">业务上下文的定义</font></strong><font style="color:rgb(15, 17, 21);">：上下游共性的非资源校验，如物品启停用、管辖权限、会计期等。</font></p>
+<p><font style="color:rgb(15, 17, 21);">供应链业务对于 界限上下文 目前均是由业务方进行前置的校验，极端情况可能出现上游校验通过，下游因为业务界限上下文变化出现失败。</font></p>
+<ol>
+<li><font style="color:rgb(15, 17, 21);">选择 TCC &#x2F; Saga 事务，理论上不会存在上下文变化情况，因为每个接口仅重试3次，再次失败就会回滚，时间在毫秒级。</font></li>
+<li><font style="color:rgb(15, 17, 21);">选择正向重试补偿时，可能出现正向补偿一直失败，需要人工介入，但是后续人工介入重试发生了上下文变化，但是无法重入。如异步进行库存入库，此时库存存在进行成本重算导致一直重试失败，后续人工介入时，出现物品停用等校验不过的情况。</font></li>
+</ol>
+<p><strong><font style="color:rgb(15, 17, 21);">治理方案：</font></strong></p>
+<ol>
+<li><font style="color:rgb(15, 17, 21);">同物品启停用，之前和产品对齐有个原则为只在订货时校验，后续业务不再校验。但该方案无法适配所有场景，如会计期校验。</font></li>
+<li><font style="color:rgb(15, 17, 21);">对于选择正向重试补偿的场景，若重试时出现业务上下文校验失败的情况，人工介入处理。下游资源方增加参数，可跳过业务校验。</font></li>
+</ol>
+<p><font style="color:rgb(15, 17, 21);"></font></p>
+<h2 id="事务方案对比选型"><a href="#事务方案对比选型" class="headerlink" title="事务方案对比选型"></a><font style="color:rgb(15, 17, 21);">事务方案对比选型</font></h2><p><font style="color:rgb(15, 17, 21);">从上文分析看，针对不同的场景事务方案对比点在于：最大努力通知和可靠消息型事务、TCC 和 Saga 型事务之间。</font></p>
+<p><font style="color:rgb(15, 17, 21);">Swan 对四种事务类型都进行了实现，还提供了异常报警、手动补偿、大盘监控等基建能力，并且注解式接入方案也较为轻量。因此基于 Swan 实现方案进行对比选项。</font></p>
+<h3 id="最大努力通知和可靠消息型事务对比"><a href="#最大努力通知和可靠消息型事务对比" class="headerlink" title=" 最大努力通知和可靠消息型事务对比"></a><font style="color:rgb(15, 17, 21);"> 最大努力通知和可靠消息型事务对比</font></h3><p><font style="color:rgb(15, 17, 21);">Swan 对于最大努力通知型事务和可靠消息型事务的实现比较类似，主要差异点在于最大努力通知型事务由于事务日志的插入和本地提交不在同一事物中，极端情况下可能因为插入事务日志失败，导致事务丢失。简单对比如下：</font></p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><font style="color:rgb(15, 17, 21);">方案简介</font></th>
+<th><font style="color:rgb(15, 17, 21);">业务适配度</font></th>
+<th><font style="color:rgb(15, 17, 21);">复杂度</font></th>
+<th><font style="color:rgb(15, 17, 21);">稳定性</font></th>
+<th><font style="color:rgb(15, 17, 21);">可扩展性</font></th>
+<th><font style="color:rgb(15, 17, 21);">开发&#x2F;维护成本</font></th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td><strong><font style="color:rgb(15, 17, 21);">1. 通知型事务</font></strong><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">1. Swan 实现会通过 DB&#x2F;Cellar 存储事务日志，因此在管理平台上可查询异常事务信息，对异常事务进行重试等操作，解决了事务全局失败后不好手动补偿的问题，并可限定 set。</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">2. 支持同步、异步、同步几次后转异步等多种重试机制，也可配置按执行异常进行重试&#x2F;不重试</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">3. 提供了异常通知、报警等基础基建，全局事务失败后进行报警；业务上可实现全局回调方法，在全局事务成功后或失败后回调执行。</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">4. 若选择 DB 存储事务日志，需要业务方建相关表，业务上无需感知事件写入逻辑。</font></td>
+<td><font style="color:rgb(15, 17, 21);">适配度高</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">能够满足场景1的业务诉求</font></td>
+<td><font style="color:rgb(15, 17, 21);">复杂度低</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">无需下游业务提供回滚接口，只需要保证正向接口的幂等</font></td>
+<td><font style="color:rgb(15, 17, 21);">稳定性中</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">极端情况下事务日志插入 DB 失败，导致事务日志数据丢失</font></td>
+<td><font style="color:rgb(15, 17, 21);">可扩展性高</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">只调整现有流程编排</font></td>
+<td><font style="color:rgb(15, 17, 21);">开发&#x2F;维护成本低</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">只需要下游业务支持接口幂等和空回滚</font></td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong><font style="color:rgb(15, 17, 21);">2. 消息型事务</font></strong><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">1. 业务上无需感知事务事件写入逻辑，由 SDK 底层实现，业务侧只需创建目录表即可。</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">2. SDK 的实现基于 Spring 声明式事务，业务上需要使用声明式事务才能保证业务和事务事件在同一事务中提交。</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">3. 提供了异常通知、报警等基础基建，重试一直失败到最大次数或者最大时间后，会进行大盘报警，同时 RD 可在 Swan 管理平台上手动对该事务日志进行重试和删除。</font></td>
+<td><font style="color:rgb(15, 17, 21);">适配度高</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">能够满足场景1的业务诉求</font></td>
+<td><font style="color:rgb(15, 17, 21);">复杂度低</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">无需下游业务提供回滚接口，只需要保证正向接口的幂等</font></td>
+<td><font style="color:rgb(15, 17, 21);">稳定性高</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">本地事务提交，下游业务最终一定成功</font></td>
+<td><font style="color:rgb(15, 17, 21);">可扩展性高</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">只调整现有流程编排</font></td>
+<td><font style="color:rgb(15, 17, 21);">开发&#x2F;维护成本中</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">基于注解实现，业务的改造小</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">只需要下游业务支持接口幂等和空回滚</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">需要对现有的 template 型事务进行改造，换为 spring 声明式事务。</font></td>
+</tr>
+</tbody></table>
+<p><strong><font style="color:rgb(15, 17, 21);">方案对比 &amp; 结论：</font></strong></p>
+<p><font style="color:rgb(15, 17, 21);">从供应链业务上看</font><font style="color:rgb(15, 17, 21);"> </font><strong><font style="color:rgb(15, 17, 21);">通知型事务 &gt; 消息型事务</font></strong></p>
+<ol>
+<li><font style="color:rgb(15, 17, 21);">虽然通知型事务可能丢失事务日志，但是 DB insert 失败的场景过于极端。</font></li>
+<li><font style="color:rgb(15, 17, 21);">消息型事务由于事务日志插入 DB 是在本地事务中，目前 Swan 的实现是基于代理 Spring 的声明式事务来隐式织入，保证在同一事务。但供应链业务中目前都是使用的 template 型事务，改造有一定成本。</font></li>
+</ol>
+<h3 id="TCC-和-Saga-型事务对比"><a href="#TCC-和-Saga-型事务对比" class="headerlink" title="TCC 和 Saga 型事务对比"></a><font style="color:rgb(15, 17, 21);">TCC 和 Saga 型事务对比</font></h3><table>
+<thead>
+<tr>
+<th><font style="color:rgb(15, 17, 21);">方案简介</font></th>
+<th><font style="color:rgb(15, 17, 21);">业务适配度</font></th>
+<th><font style="color:rgb(15, 17, 21);">复杂度</font></th>
+<th><font style="color:rgb(15, 17, 21);">稳定性</font></th>
+<th><font style="color:rgb(15, 17, 21);">可扩展性</font></th>
+<th><font style="color:rgb(15, 17, 21);">开发&#x2F;维护成本</font></th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong><font style="color:rgb(15, 17, 21);">1. TCC</font></strong><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">1. 下游业务需要拆分为 2 阶段提交的模式。</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">2. Swan 提供的本地 TCC 实现仅顶层应用需要接入 SDK，下游应用仅需提供 T-C-C 功能接口，无需按 TCC 模式改造。</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">3. 提供了异常通知、报警、事务信息等基础基建，如果达到熔断条件，事务不再继续重试，而是告警给用户人工处理。</font></td>
+<td><font style="color:rgb(15, 17, 21);">适配度高</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">对所有场景都能支持</font></td>
+<td><font style="color:rgb(15, 17, 21);">复杂度高</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">需要下游业务按二阶段模式改造，并提供 T-C-C 3个接口，且所有接口都需要支持幂等。</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">业务上有一定理解成本</font></td>
+<td><font style="color:rgb(15, 17, 21);">稳定性高</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">最大程度的满足事务 ACID 特性</font></td>
+<td><font style="color:rgb(15, 17, 21);">可扩展性高</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">一次对接，后续新接口按标准能力设计接入</font></td>
+<td><font style="color:rgb(15, 17, 21);">开发&#x2F;维护成本高</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">所有下游限制型资源都需要按二阶段改造。保证 T-C-C 接口的幂等。</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">下游业务支持空回滚</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">当前业务按 TCC 型事务进行拆分编排</font></td>
+</tr>
+<tr>
+<td><strong><font style="color:rgb(15, 17, 21);">2. Saga</font></strong><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">1. 集中式 Saga 实现，通过统一协调器来对分支事务进行控制，与业务有一定耦合。</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">2. 上下文 API 丰富，可用于记录一阶段结果、回滚 mtrce 参数，判断方法执行状态等。</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">3. 提供了异常通知、报警、事务信息等基础基建，如果达到熔断条件，事务不再继续重试，而是告警给用户人工处理。</font></td>
+<td><font style="color:rgb(15, 17, 21);">适配度中</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">不保证隔离性，不能满足强隔离性业务场景，如业务强限制不能扣减为负</font></td>
+<td><font style="color:rgb(15, 17, 21);">复杂度中</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">需要下游提供正向-逆向 2 个接口，且所有接口都需要支持幂等。</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">正向-逆向流程业务上理解成本较低</font></td>
+<td><font style="color:rgb(15, 17, 21);">稳定性中</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">回滚场景需要业务突破限制，否则事务到达终态</font></td>
+<td><font style="color:rgb(15, 17, 21);">可扩展性中</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">一次对接，后续新接口按标准能力设计接入</font></td>
+<td><font style="color:rgb(15, 17, 21);">开发&#x2F;维护成本中</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">下游限制型资源提供正向接口，保证逆向接口的幂等。</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">下游业务支持空回滚</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">当前业务按 Saga 型事务进行拆分编排</font></td>
+</tr>
+</tbody></table>
+<p><strong><font style="color:rgb(15, 17, 21);">方案对比：</font></strong></p>
+<p><strong><font style="color:rgb(15, 17, 21);">1. 隔离性对比</font></strong></p>
+<p><font style="color:rgb(15, 17, 21);">因为 Saga 型事务不保证隔离性，可能导致回滚时【全局限定资源扣减】的失败。此时若选择 Saga 型事务需要业务层面改造支持，一般来看需要业务做如下处理：</font></p>
+<ul>
+<li><strong><font style="color:rgb(15, 17, 21);">预校验</font></strong><font style="color:rgb(15, 17, 21);">：最大概率保证正向提交时无资源不足问题。</font><ul>
+<li><font style="color:rgb(15, 17, 21);">举例如下：发货出库时先查询出库存当前库存量，在校验阶段预先校验，最大程度的减少提交时资源不足的情况。</font></li>
+</ul>
+</li>
+<li><strong><font style="color:rgb(15, 17, 21);">业务在回滚时不限制资源</font></strong><font style="color:rgb(15, 17, 21);">。</font><ul>
+<li><font style="color:rgb(15, 17, 21);">举例如下：配送退货会给用户退款，极端情况下退款金额被用户订货时使用，配送送货回滚进行扣款时发现余额不足。所以业务上需要在回滚时可选择将账户扣为负。</font></li>
+<li><font style="color:rgb(15, 17, 21);">结合供应链自身业务场景，扣款、出库操作存在不能扣为负的强限制场景（如赠送余额不能扣为负、库存不能为负、库存开关关闭）。预占、冻结操作业务上能够允许为负。</font></li>
+</ul>
+</li>
+</ul>
+<p><strong><font style="color:rgb(15, 17, 21);">隔离性问题出现前提：</font></strong></p>
+<ol>
+<li><font style="color:rgb(15, 17, 21);">业务存在并发调用场景，若不存在并发，无隔离性问题。</font></li>
+<li><font style="color:rgb(15, 17, 21);">正向是资源增加，回滚时资源扣减场景，正向资源增加后并发扣减，导致回滚时资源不够回滚失败。对于正向是资源扣减的场景，回滚是资源增加，也无需关注隔离性问题。</font></li>
+</ol>
+<p><strong><font style="color:rgb(15, 17, 21);">2. 业务适配度对比</font></strong></p>
+<ul>
+<li><font style="color:rgb(15, 17, 21);">如果业务上能够兼容，如库存预占、账户冻结：</font><strong><font style="color:rgb(15, 17, 21);">TCC ≈ Saga</font></strong></li>
+<li><font style="color:rgb(15, 17, 21);">如果不考虑业务兼容或者业务上存在不能兼容的情况，如库存出库、账户扣减：</font><strong><font style="color:rgb(15, 17, 21);">TCC ≥ Saga</font></strong></li>
+</ul>
+<p><strong><font style="color:rgb(15, 17, 21);">3. 开发&#x2F;维护成本对比</font></strong></p>
+<ul>
+<li><strong><font style="color:rgb(15, 17, 21);">业务方改造成本</font></strong><font style="color:rgb(15, 17, 21);">：TCC 和 Saga 都需要业务发进行编排修改和组件接入，相对来说 TCC 涉及到业务 2 阶段的适配，而 Saga 的正向流程与业务更贴合，所以业务方接入成本上</font><font style="color:rgb(15, 17, 21);"> </font><strong><font style="color:rgb(15, 17, 21);">TCC 最高，Saga ≥ TCC</font></strong><font style="color:rgb(15, 17, 21);">。</font></li>
+<li><strong><font style="color:rgb(15, 17, 21);">资源方改造成本</font></strong><font style="color:rgb(15, 17, 21);">：TCC 和 Saga 都需要资源方需要提供如回滚能力、幂等能力、空回滚处理。相对来说 TCC 会有一个资源方二阶段改造成本。供应链已知的【全局限定资源】中，库存已支持锁库，业务可按二阶段接入。资金账户已完成二阶段改造的设计对详，详见：账户记账二阶段改造 &amp; 冻结金额拆分，预计 15PD 改造成本。促销资源的改造成本和资金账户类似。因此都接入 TCC 预计的成本会多 30PD。</font><strong><font style="color:rgb(15, 17, 21);">Saga ≥ TCC</font></strong><font style="color:rgb(15, 17, 21);">。</font></li>
+<li><strong><font style="color:rgb(15, 17, 21);">维护成本</font></strong><font style="color:rgb(15, 17, 21);">：TCC 的二阶段有一定的理解成本，问题排查上查看多张表记录，维护成本相对较高。</font><strong><font style="color:rgb(15, 17, 21);">Saga ≥ TCC</font></strong><font style="color:rgb(15, 17, 21);">。</font></li>
+</ul>
+<p><strong><font style="color:rgb(15, 17, 21);">结论：</font></strong></p>
+<ol>
+<li><font style="color:rgb(15, 17, 21);">除部分特殊场景外均使用</font><font style="color:rgb(15, 17, 21);"> </font><strong><font style="color:rgb(15, 17, 21);">Saga</font></strong><font style="color:rgb(15, 17, 21);">。</font></li>
+<li><font style="color:rgb(15, 17, 21);">特殊场景：</font><strong><font style="color:rgb(15, 17, 21);">退货收货、差异处理&#x2F;撤销场景使用 TCC</font></strong><font style="color:rgb(15, 17, 21);">。</font></li>
+</ol>
+<p><strong><font style="color:rgb(15, 17, 21);">决策如下：</font></strong></p>
+<ol>
+<li><font style="color:rgb(15, 17, 21);">Saga 事务落地和维护成本更低。</font></li>
+<li><font style="color:rgb(15, 17, 21);">目前预占、冻结操作业务层面支持“扣减为负”的情况。</font></li>
+<li><font style="color:rgb(15, 17, 21);">从目前供应链业务数据看，平均每个门店每天单单量 &lt;1，有并发冲突导致出现隔离性问题的概率较低。</font></li>
+<li><font style="color:rgb(15, 17, 21);">正向流程为资源扣减的场景，逆向为资源增加，业务上无需考虑隔离性导致的回滚失败问题。</font></li>
+</ol>
+<p><font style="color:rgb(15, 17, 21);">综上，绝大部分场景选择 Saga 事务能够解决问题，且落地成本和风险可控，收益上大于选择 TCC。</font></p>
+<p><strong><font style="color:rgb(15, 17, 21);">退货收货、差异处理&#x2F;撤销场景</font></strong><font style="color:rgb(15, 17, 21);">正向流程为【全局限定资源增加】，逆向流程为【全局限定资源减少】，且业务上存在不能为负的限制（数据修复成本较高，且可能有资损），因此选择接入 TCC，保证业务限制不能突破。</font></p>
+<h3 id="方案选型结论"><a href="#方案选型结论" class="headerlink" title="方案选型结论"></a><font style="color:rgb(15, 17, 21);">方案选型结论</font></h3><p><strong><font style="color:rgb(15, 17, 21);">说明</font></strong></p>
+<ol>
+<li><font style="color:rgb(15, 17, 21);">方案选型只涉及到当前业务，长链条上的业务按当前思路各自套用。</font></li>
+<li><font style="color:rgb(15, 17, 21);">下游业务必须进行的改造</font><font style="color:rgb(15, 17, 21);"><br></font><font style="color:rgb(15, 17, 21);">a. 接口必须支持幂等</font><font style="color:rgb(15, 17, 21);"><br></font><font style="color:rgb(15, 17, 21);">b. 若提供回滚&#x2F;撤销接口，下游业务必须支持空回滚</font></li>
+<li><font style="color:rgb(15, 17, 21);">【业务方不关注的不限制资源】和【业务方不关注的全局限定资源增加】在【本地事务】后执行，进行正向重试补偿，使用</font><font style="color:rgb(15, 17, 21);"> </font><strong><font style="color:rgb(15, 17, 21);">最大努力通知型事务</font></strong><font style="color:rgb(15, 17, 21);">。</font></li>
+<li><font style="color:rgb(15, 17, 21);">【全局限定资源减少】、【业务方关注的全局限定资源增加】和【业务方关注的不限制资源】在【本地事务】前执行，需要考虑资源的回滚，使用 </font><strong><font style="color:rgb(15, 17, 21);">Saga 型事务</font></strong><font style="color:rgb(15, 17, 21);">。</font></li>
+</ol>
+<p><font style="color:rgb(15, 17, 21);"></font></p>
+<h2 id="幂等方案"><a href="#幂等方案" class="headerlink" title="幂等方案"></a><font style="color:rgb(15, 17, 21);">幂等方案</font></h2><h3 id="方案思考"><a href="#方案思考" class="headerlink" title="方案思考"></a><font style="color:rgb(15, 17, 21);">方案思考</font></h3><p><font style="color:rgb(15, 17, 21);">幂等方案主要需要从3个方面进行考虑：</font></p>
+<ol>
+<li><font style="color:rgb(15, 17, 21);">如何判断是重复请求</font></li>
+<li><font style="color:rgb(15, 17, 21);">如何进行并发控制</font></li>
+<li><font style="color:rgb(15, 17, 21);">重复请求如何处理</font></li>
+</ol>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><font style="color:rgb(15, 17, 21);">考虑维度</font></th>
+<th><font style="color:rgb(15, 17, 21);">方案说明</font></th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td><strong><font style="color:rgb(15, 17, 21);">1. 如何判断是重复请求</font></strong></td>
+<td><font style="color:rgb(15, 17, 21);">判断是否重复请求主要看业务上能否有唯一标识，因此主要有以下3种场景和方案：</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">-</font><font style="color:rgb(15, 17, 21);"> </font><strong><font style="color:rgb(15, 17, 21);">场景1：无业务唯一标识的新增</font></strong><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">此场景下需要服务端颁发 token，通过 token 判断是否重复，做防重复提交</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">-</font><font style="color:rgb(15, 17, 21);"> </font><strong><font style="color:rgb(15, 17, 21);">场景2：有业务唯一标识的新增</font></strong><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">此场景下可以使用业务唯一键判断是否重复</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">-</font><font style="color:rgb(15, 17, 21);"> </font><strong><font style="color:rgb(15, 17, 21);">场景3：有业务唯一标识的更新</font></strong><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">此场景下可以使用业务数据对应的唯一键 + 状态&#x2F;版本号 判断是否重复</font></td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong><font style="color:rgb(15, 17, 21);">2. 如何进行并发控制</font></strong></td>
+<td><font style="color:rgb(15, 17, 21);">- 使用数据库</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">- 唯一索引</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">- 悲观锁：select for update</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">- 乐观锁：update set XXX and version &#x3D; 2 where version &#x3D; 1</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">- 使用分布式锁</font></td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong><font style="color:rgb(15, 17, 21);">3. 重复请求如何处理</font></strong></td>
+<td><font style="color:rgb(15, 17, 21);">-</font><font style="color:rgb(15, 17, 21);"> </font><strong><font style="color:rgb(15, 17, 21);">场景1：消息重复消费</font></strong><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">此场景下，不需要给上游一个返回，重复执行只需要丢弃</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">-</font><font style="color:rgb(15, 17, 21);"> </font><strong><font style="color:rgb(15, 17, 21);">场景2：前端重复提交</font></strong><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">此场景下，需要给用户一个提示，那么重复请求可以直接抛出一个 DuplicateRequestException 异常，由上层捕获，前端展示“请不要重复请求”</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">-</font><font style="color:rgb(15, 17, 21);"> </font><strong><font style="color:rgb(15, 17, 21);">场景3：底层的转账接口</font></strong><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">此场景下，同一笔转账，重复调用第一次若成功了，第二次应该返回相同“成功”，若第一次失败了，第二次返回业务执行结果</font></td>
+</tr>
+<tr>
+<td>4</td>
+<td><strong><font style="color:rgb(15, 17, 21);">4. 总结说明</font></strong></td>
+<td><font style="color:rgb(15, 17, 21);">1. 如何判断是重复请求：供应链是单据驱动的业务，天然可以使用单据号相关信息作为业务唯一键，无需考虑 token 颁发机制。</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">2. 如何进行并发控制：由于供应链业务存在唯一键，因此直接使用 DB 唯一索引或者分布式锁即可。</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">3. 重复请求如何处理：在供应链场景下对于重复请求均返回成功，根据不同场景，有不同的结束方式，应该由业务方按场景自己决定是丢弃、抛异常、直接返回，还是执行业务逻辑，后续不再赘述。</font></td>
+</tr>
+</tbody></table>
+<h3 id="6-2-方案选型"><a href="#6-2-方案选型" class="headerlink" title="6.2 方案选型"></a><font style="color:rgb(15, 17, 21);">6.2 方案选型</font></h3><h4 id="6-2-1-并发控制选型"><a href="#6-2-1-并发控制选型" class="headerlink" title="6.2.1 并发控制选型"></a><font style="color:rgb(15, 17, 21);">6.2.1 并发控制选型</font></h4><p><font style="color:rgb(15, 17, 21);">按上述分析，使用 DB 唯一键或者分布式锁来进行并发控制，因此可有如下方案：</font></p>
+<table>
+<thead>
+<tr>
+<th><font style="color:rgb(15, 17, 21);">方案简介</font></th>
+<th><font style="color:rgb(15, 17, 21);">业务适配度</font></th>
+<th><font style="color:rgb(15, 17, 21);">复杂度</font></th>
+<th><font style="color:rgb(15, 17, 21);">性能</font></th>
+<th><font style="color:rgb(15, 17, 21);">可扩展性</font></th>
+<th><font style="color:rgb(15, 17, 21);">开发&#x2F;维护成本</font></th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong><font style="color:rgb(15, 17, 21);">1. 业务表中增加幂等键，幂等键作为唯一索引</font></strong><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">主要流程如下：</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">- 新增单据时在业务表中写入唯一键</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">- 收到请求时通过业务唯一键查询业务表，若有记录按返回值直接返回</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">- 并发情况下，上游的重复请求 DB 会抛出 DuplicateKey 异常，直接返回成功</font></td>
+<td><font style="color:rgb(15, 17, 21);">适配度中</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">只能满足新增时的幂等，更新操作无法保证</font></td>
+<td><font style="color:rgb(15, 17, 21);">复杂度中</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">涉及到的表需要增加幂等字段</font></td>
+<td><font style="color:rgb(15, 17, 21);">性能高</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">无需引入额外多操作</font></td>
+<td><font style="color:rgb(15, 17, 21);">可扩展性中</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">后续涉及到的幂等操作都必须要在表中新增字段</font></td>
+<td><font style="color:rgb(15, 17, 21);">开发&#x2F;维护成本中</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">业务表中需要维护业务唯一键信息</font></td>
+</tr>
+<tr>
+<td><strong><font style="color:rgb(15, 17, 21);">2. 新增幂等表，幂等表中新增业务主键为唯一索引，幂等表记录与本地事务一起提交</font></strong><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">主要流程如下：</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">- 本地事务提交时一起写幂等表</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">- 收到请求时通过业务唯一键查询幂等表，若有记录按返回值直接返回</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">- 并发情况下，上游的重复请求 DB 会抛出 DuplicateKey 异常，直接返回成功</font></td>
+<td><font style="color:rgb(15, 17, 21);">适配度高</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">所有幂等场景都能支持</font></td>
+<td><font style="color:rgb(15, 17, 21);">复杂度高</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">需要引入幂等表</font></td>
+<td><font style="color:rgb(15, 17, 21);">性能中</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">有部分的 DB 操作</font></td>
+<td><font style="color:rgb(15, 17, 21);">可扩展性高</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">后续幂等场景均在幂等表中实现即可</font></td>
+<td><font style="color:rgb(15, 17, 21);">开发&#x2F;维护成本中</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">写幂等表和本地事务一起提交，会导致代码的可维护性下降</font></td>
+</tr>
+<tr>
+<td><strong><font style="color:rgb(15, 17, 21);">3. 新增幂等表，幂等表中新增业务主键为唯一索引，幂等表记录先于本地事务提交</font></strong><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">主要流程如下：</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">- 收到请求时即插入幂等表，若抛出 DuplicateKey 异常，按返回值直接返回</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">- 如果后续业务流程有失败的情况需要回滚幂等表</font></td>
+<td><font style="color:rgb(15, 17, 21);">适配度高</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">所有幂等场景都能支持</font></td>
+<td><font style="color:rgb(15, 17, 21);">复杂度高</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">需要引入幂等表</font></td>
+<td><font style="color:rgb(15, 17, 21);">性能中</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">有部分的 DB 操作</font></td>
+<td><font style="color:rgb(15, 17, 21);">可扩展性高</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">后续幂等场景均在幂等表中实现即可</font></td>
+<td><font style="color:rgb(15, 17, 21);">开发&#x2F;维护成本低</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">幂等流程单独维护</font></td>
+</tr>
+<tr>
+<td><strong><font style="color:rgb(15, 17, 21);">4. 使用分布式锁，按业务唯一键进行加锁</font></strong><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">主要流程如下：</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">- 收到请求时加分布式锁</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">- 加锁完成后通过业务唯一键查询业务表，若有记录按返回值直接返回</font></td>
+<td><font style="color:rgb(15, 17, 21);">适配度低</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">只适合业务本身有唯一键的业务，若依赖上游唯一键则不适用</font></td>
+<td><font style="color:rgb(15, 17, 21);">复杂度中</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">代码层面加锁即可</font></td>
+<td><font style="color:rgb(15, 17, 21);">性能中</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">有额外的加锁操作</font></td>
+<td><font style="color:rgb(15, 17, 21);">可扩展性高</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">对业务操作没有影响</font></td>
+<td><font style="color:rgb(15, 17, 21);">开发&#x2F;维护成本低</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">只需要加锁即可</font></td>
+</tr>
+</tbody></table>
+<p><strong><font style="color:rgb(15, 17, 21);">总结说明：</font></strong></p>
+<ol>
+<li><font style="color:rgb(15, 17, 21);">所有方案都需要可能涉及到前序资源的回滚，由分布式数据一致性方案解决。</font></li>
+<li><font style="color:rgb(15, 17, 21);">方案一业务适配度较低且后续可维护性和扩展性较低，暂不考虑该方案。</font></li>
+<li><font style="color:rgb(15, 17, 21);">方案二和方案三的差异点在于幂等表的写操作时机，相较来看方案二优于方案三，因为方案三极端情况还需要回滚幂等表。</font></li>
+<li><font style="color:rgb(15, 17, 21);">方案四缺陷在于需要依赖业务本身的唯一键，若唯一键由上游传入则不适用，因为需要根据唯一键来查询是否执行。</font></li>
+</ol>
+<p><strong><font style="color:rgb(15, 17, 21);">综上：</font></strong></p>
+<ol>
+<li><font style="color:rgb(15, 17, 21);">优先选择方案二，若存在业务本身的唯一键可选择方案四。</font></li>
+</ol>
+<h4 id="6-2-2-重复请求判定选型"><a href="#6-2-2-重复请求判定选型" class="headerlink" title="6.2.2 重复请求判定选型"></a><font style="color:rgb(15, 17, 21);">6.2.2 重复请求判定选型</font></h4><p><font style="color:rgb(15, 17, 21);">按上述分析，供应链业务可使用单据号相关信息作为业务唯一键，因此可有如下方案：</font></p>
+<table>
+<thead>
+<tr>
+<th><font style="color:rgb(15, 17, 21);">方案简介</font></th>
+<th><font style="color:rgb(15, 17, 21);">业务适配度</font></th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong><font style="color:rgb(15, 17, 21);">1. 使用单据号作为业务唯一键</font></strong></td>
+<td><font style="color:rgb(15, 17, 21);">适配度低</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">只能满足 1 对 1 的新增场景，1 对多新增和更新操作无法满足</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">如：</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">- 配送收货单多次收货入库，此时按收货单单据号作为唯一键，会导致后续部分收货无法创建入库单</font><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">- 前端的发起的单据更新，对一张单据的多次更新，也会导致直接触发幂等，更新失效</font></td>
+</tr>
+<tr>
+<td><strong><font style="color:rgb(15, 17, 21);">2. 使用单据号 + 版本号作为业务唯一键</font></strong></td>
+<td><font style="color:rgb(15, 17, 21);">适配度高</font><font style="color:rgb(15, 17, 21);">      </font><font style="color:rgb(15, 17, 21);">所有场景都能支持，版本号变更一定是有 DB 操作，因此单据号 + 版本号能够唯一的确认一次写操作流程。</font></td>
+</tr>
+<tr>
+<td><strong><font style="color:rgb(15, 17, 21);">3. 总结说明：</font></strong><font style="color:rgb(15, 17, 21);">   </font><font style="color:rgb(15, 17, 21);">使用</font><font style="color:rgb(15, 17, 21);"> </font><strong><font style="color:rgb(15, 17, 21);">单据号 + 版本号</font></strong><font style="color:rgb(15, 17, 21);"> </font><font style="color:rgb(15, 17, 21);">作为业务唯一键</font></td>
+<td></td>
+</tr>
+</tbody></table>
+<h4 id="6-3-2-选型结论"><a href="#6-3-2-选型结论" class="headerlink" title="6.3.2 选型结论"></a><font style="color:rgb(15, 17, 21);">6.3.2 选型结论</font></h4><ul>
+<li><font style="color:rgb(15, 17, 21);">使用</font><font style="color:rgb(15, 17, 21);"> </font><strong><font style="color:rgb(15, 17, 21);">单据号 + 版本号</font></strong><font style="color:rgb(15, 17, 21);"> </font><font style="color:rgb(15, 17, 21);">作为业务唯一键</font></li>
+<li><font style="color:rgb(15, 17, 21);">优先选择</font><font style="color:rgb(15, 17, 21);"> </font><strong><font style="color:rgb(15, 17, 21);">幂等表</font></strong><font style="color:rgb(15, 17, 21);"> </font><font style="color:rgb(15, 17, 21);">来进行并发控制，幂等表记录先于本地事务提交；若存在业务本身的唯一键可选择分布式锁来进行并发控制</font></li>
+</ul>
+<p><strong><font style="color:rgb(15, 17, 21);">注意：</font></strong><font style="color:rgb(15, 17, 21);"> 下游业务在处理上游业务发起的回滚请求时，除了要回滚资源，还需要在幂等表中删除对应的幂等键。</font></p>
+]]></content>
+      <categories>
+        <category>面试指南</category>
+      </categories>
+      <tags>
+        <tag>分布式事务</tag>
+        <tag>TCC</tag>
+        <tag>Saga</tag>
+        <tag>面试</tag>
+      </tags>
+  </entry>
+</search>
