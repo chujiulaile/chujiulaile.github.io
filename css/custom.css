@@ -258,3 +258,231 @@ figure.highlight {
     border-radius: 12px !important;
   }
 }
+
+/* ==========================================
+   21. 全局吸底音乐播放器修复
+   确保 APlayer fixed 模式下所有控件正常显示
+   布局: [封面] | 标题行 / 控制行 | [音量图标] [模式图标] [列表图标]
+   ========================================== */
+
+/* 播放器容器 - 全宽吸底 */
+.aplayer.aplayer-fixed {
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100% !important;
+  z-index: 9998 !important;
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.12) !important;
+}
+
+/* 主体区域 - flex 行布局 */
+.aplayer.aplayer-fixed .aplayer-body {
+  display: flex !important;
+  align-items: center !important;
+  height: 66px !important;
+  padding: 0 8px 0 0 !important;
+  gap: 0 !important;
+}
+
+/* 封面图片 - 固定尺寸 */
+.aplayer.aplayer-fixed .aplayer-pic {
+  display: block !important;
+  width: 66px !important;
+  height: 66px !important;
+  flex-shrink: 0 !important;
+}
+
+/* 信息区域 - 纵向排列：标题行 + 控制器行 */
+.aplayer.aplayer-fixed .aplayer-info {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  flex: 1 !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  margin-left: 10px !important;
+  margin-right: 6px !important;
+}
+
+/* 歌曲标题行 - 单行溢出省略 */
+.aplayer.aplayer-fixed .aplayer-music {
+  display: block !important;
+  overflow: hidden !important;
+  white-space: nowrap !important;
+  text-overflow: ellipsis !important;
+}
+
+.aplayer.aplayer-fixed .aplayer-title {
+  font-size: 14px !important;
+  color: #333 !important;
+  line-height: 22px !important;
+}
+
+.aplayer.aplayer-fixed .aplayer-author {
+  font-size: 12px !important;
+  color: #999 !important;
+  margin-left: 2px !important;
+}
+
+/* 进度条控制器行 - 按钮 + 进度条 + 时间 */
+.aplayer.aplayer-fixed .aplayer-controller {
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  height: 28px !important;
+}
+
+.aplayer.aplayer-fixed .aplayer-bar-wrap {
+  flex: 1 !important;
+  height: 3px !important;
+  min-width: 40px !important;
+  background: #e0e0e0 !important;
+  border-radius: 2px !important;
+  cursor: pointer !important;
+  position: relative !important;
+  align-self: center !important;
+}
+
+.aplayer .aplayer-loaded {
+  background: #ccc !important;
+}
+
+.aplayer .aplayer-played {
+  background: #F0A1A8 !important;
+}
+
+.aplayer .aplayer-thumb {
+  background: #F0A1A8 !important;
+  border: 2px solid #fff !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* 时间显示 */
+.aplayer.aplayer-fixed .aplayer-time {
+  display: inline-flex !important;
+  align-items: center !important;
+  font-size: 12px !important;
+  color: #999 !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+}
+
+/* 音量控制 */
+.aplayer.aplayer-fixed .aplayer-volume-wrap {
+  display: flex !important;
+  align-items: center !important;
+  flex-shrink: 0 !important;
+}
+
+.aplayer.aplayer-fixed .aplayer-volume-bar-wrap {
+  width: 56px !important;
+  height: 3px !important;
+  background: #e0e0e0 !important;
+  border-radius: 2px !important;
+  margin-left: 4px !important;
+  cursor: pointer !important;
+}
+
+.aplayer .aplayer-volume {
+  background: #F0A1A8 !important;
+}
+
+/* 通用图标按钮修复 */
+.aplayer .aplayer-icon {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 26px !important;
+  height: 26px !important;
+  opacity: 0.65 !important;
+  color: #555 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  border: none !important;
+  outline: none !important;
+  background: transparent !important;
+  flex-shrink: 0 !important;
+  padding: 0 !important;
+}
+
+.aplayer .aplayer-icon:hover {
+  opacity: 1 !important;
+  color: #F0A1A8 !important;
+}
+
+/* 播放/暂停按钮稍大 */
+.aplayer.aplayer-fixed .aplayer-icon-play,
+.aplayer.aplayer-fixed .aplayer-icon-pause {
+  width: 30px !important;
+  height: 30px !important;
+}
+
+/* 修复 SVG 图标显示 */
+.aplayer .aplayer-icon svg {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  fill: currentColor !important;
+}
+
+/* 歌词区域 - 默认隐藏 */
+.aplayer .aplayer-lrc {
+  display: none !important;
+}
+
+.aplayer.aplayer-withlrc .aplayer-lrc {
+  display: block !important;
+}
+
+/* 播放列表弹窗层级 */
+.aplayer .aplayer-list {
+  z-index: 9999 !important;
+}
+
+/* ======= 暗色模式适配 ======= */
+[data-theme="dark"] .aplayer.aplayer-fixed {
+  background: rgba(30, 30, 30, 0.92) !important;
+}
+[data-theme="dark"] .aplayer.aplayer-fixed .aplayer-title {
+  color: #e0e0e0 !important;
+}
+[data-theme="dark"] .aplayer.aplayer-fixed .aplayer-author {
+  color: #888 !important;
+}
+[data-theme="dark"] .aplayer.aplayer-fixed .aplayer-time {
+  color: #888 !important;
+}
+[data-theme="dark"] .aplayer.aplayer-fixed .aplayer-bar-wrap,
+[data-theme="dark"] .aplayer.aplayer-fixed .aplayer-volume-bar-wrap {
+  background: #444 !important;
+}
+[data-theme="dark"] .aplayer .aplayer-loaded {
+  background: #555 !important;
+}
+[data-theme="dark"] .aplayer .aplayer-icon {
+  color: #bbb !important;
+}
+[data-theme="dark"] .aplayer .aplayer-icon:hover {
+  color: #F0A1A8 !important;
+}
+
+/* ======= 响应式适配 ======= */
+@media screen and (max-width: 768px) {
+  .aplayer.aplayer-fixed .aplayer-volume-wrap {
+    display: none !important;
+  }
+  .aplayer.aplayer-fixed .aplayer-info {
+    margin-right: 4px !important;
+  }
+  .aplayer.aplayer-fixed .aplayer-time {
+    font-size: 11px !important;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .aplayer.aplayer-fixed .aplayer-icon.aplayer-icon-menu,
+  .aplayer.aplayer-fixed .aplayer-icon.aplayer-icon-lrc,
+  .aplayer.aplayer-fixed .aplayer-icon.aplayer-icon-mode {
+    display: none !important;
+  }
+}
