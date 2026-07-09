@@ -5,8 +5,6 @@
     <url>/2026/07/09/%E4%B8%AA%E4%BA%BA%E7%94%9F%E6%B4%BB-%E7%AC%AC%E4%B8%80%E7%AF%87/</url>
     <content><![CDATA[<h2 id="为什么创建这个博客"><a href="#为什么创建这个博客" class="headerlink" title="为什么创建这个博客"></a>为什么创建这个博客</h2><p>一直想有一个属于自己的小天地，用来记录技术成长、生活感悟和面试经验。经过几天的折腾，终于把这个博客搭建起来了！</p>
 <h2 id="技术栈"><a href="#技术栈" class="headerlink" title="技术栈"></a>技术栈</h2><ul>
-<li><strong>框架</strong>: Hexo 7.x</li>
-<li><strong>主题</strong>: Butterfly 5.5.5</li>
 <li><strong>部署</strong>: GitHub Pages</li>
 <li><strong>域名</strong>: chujiulaile.github.io</li>
 </ul>
